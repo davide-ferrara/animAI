@@ -1,103 +1,152 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"os"
 	"os/exec"
-	"strings" // Necessario per il filtraggio
+	"strings"
+	"syscall"
 
-	// ... altre importazioni
 	"github.com/fsnotify/fsnotify"
 )
 
-func Watch() {
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		log.Fatal(err)
+func runServer() (*os.Process, error) {
+	log.Println("WATCHER Building server binary")
+	buildCmd := exec.Command("make", "server")
+	buildCmd.Stdout = os.Stdout
+	buildCmd.Stderr = os.Stderr
+
+	if err := buildCmd.Run(); err != nil {
+		log.Println("WATCHER ERROR executing make server:", err)
+	} else {
+		log.Println("WATCHER Web Server recompiled! Browser reload required.")
 	}
-	defer watcher.Close()
 
-	// Canale per il blocco (già presente)
-	done := make(chan struct{})
+	runServerCmd := exec.Command("./webserver")
+	runServerCmd.Stdout = os.Stdout
+	runServerCmd.Stderr = os.Stderr
 
-	go func() {
-		for {
-			select {
-			case event, ok := <-watcher.Events:
-				if !ok {
-					return
-				}
+	// Not blocking
+	if err := runServerCmd.Start(); err != nil {
+		log.Println("WATCHER: Failed to start server:", err)
+		return nil, errors.New("err")
+	}
+	process := runServerCmd.Process
+	log.Print("WATCHER Server running on PID: ", process.Pid)
+	return process, nil
+}
 
-				// 1. FILTRO: Ignora i file generati
-				if strings.HasSuffix(event.Name, "_templ.go") || strings.HasSuffix(event.Name, "bundle.js") {
-					continue // Salta l'evento
-				}
+func stopServer(serverProcess *os.Process) {
+	if serverProcess == nil {
+		return
+	}
+	log.Printf("WATCHER: Stopping server process (PID: %d)...", serverProcess.Pid)
+	if err := serverProcess.Signal(syscall.SIGTERM); err != nil {
+		log.Println("WATCHER: Failed to stop server, killing:", err)
+		if err := serverProcess.Kill(); err != nil {
+			log.Println("WATCHER Could not kill the server process!")
+		}
+	}
+	if _, err := serverProcess.Wait(); err != nil {
+		log.Println("WATCHER Could not wait server process!")
+	}
+	serverProcess = nil
+}
 
-				// Esegui la compilazione solo per eventi di WRITE, CREATE, REMOVE, ecc.
-				if event.Has(fsnotify.Write) {
-					// 2. FILTRAGGIO ESECUZIONE
-					if strings.HasSuffix(event.Name, ".js") || strings.HasSuffix(event.Name, ".css") {
-						// A. MODIFICA ASSET (JS/CSS): Solo ricompilazione Esbuild
-						log.Printf("Asset change detected in: %s. Recompiling JS/CSS...", event.Name)
+func Watch() {
+	log.SetPrefix("[WATCHER] ")
 
-						compileJs := exec.Command("make", "es")
-						compileJs.Stdout = os.Stdout
-						compileJs.Stderr = os.Stderr
+	for {
+		var serverProcess *os.Process
+		var err error
 
-						if err := compileJs.Run(); err != nil {
-							log.Println("ERROR executing make es:", err)
-						} else {
-							log.Println("JS/CSS Recompiled! Browser reload required.")
-						}
+		serverProcess, err = runServer()
+		if err != nil {
+			log.Fatal("WATCHER ERROOR Server could not Run!")
+		}
 
-					} else if strings.HasSuffix(event.Name, ".go") || strings.HasSuffix(event.Name, ".templ") {
-						// B. MODIFICA CODICE SERVER (GO/TEMPL): Compilazione Templ + Riavvio Server
-						log.Printf("Server code change detected in: %s. Recompiling Templ...", event.Name)
+		watcher, err := fsnotify.NewWatcher()
+		if err != nil {
+			log.Fatal(err)
+		}
+		// defer watcher.Close()
+		done := make(chan struct{})
 
-						// 1. Compilazione TEMPL
-						compileTempl := exec.Command("make", "templ")
-						compileTempl.Stdout = os.Stdout
-						compileTempl.Stderr = os.Stderr
-
-						if err := compileTempl.Run(); err != nil {
-							log.Println("ERROR executing make templ:", err)
-							continue // Non riavviare se la compilazione fallisce
-						}
-						log.Println("Templ Recompiled!")
-
-						// 2. RIAVVIO DEL SERVER (kill the main thread)
-						log.Println("Restarting Go application...")
-						// Invece di riavviare, qui dovresti inviare un segnale al
-						// processo principale che si occupa del server HTTP.
-						// Per un setup rapido, puoi usare un tool esterno come 'air' o 'gow'
-						// che è progettato per gestire il riavvio del processo genitore.
-
-						// Per il tuo attuale setup: devi uscire dalla watch-loop e innescare
-						// il riavvio (il che è complesso senza un gestore esterno).
-						// La soluzione più semplice è usare un tool di live-reload esterno,
-						// o chiudere il canale per far terminare il programma Go.
-
-						// Per simulare il riavvio: chiudi il watcher e il canale 'done'
-						// Questo in un sistema reale verrebbe gestito da un tool di terze parti.
-						watcher.Close()
-						close(done)
+		go func() {
+			for {
+				select {
+				case event, ok := <-watcher.Events:
+					if !ok {
 						return
 					}
+					log.Print("New event: ", event.Name)
+
+					if strings.HasSuffix(event.Name, "_templ.go") || strings.HasSuffix(event.Name, "bundle.js") {
+						continue // Salta l'evento
+					}
+
+					// Esegui la compilazione solo per eventi di WRITE, CREATE, REMOVE, ecc.
+					if event.Has(fsnotify.Write) {
+						// 2. FILTRAGGIO ESECUZIONE
+						if strings.HasSuffix(event.Name, ".js") || strings.HasSuffix(event.Name, ".css") {
+							// A. MODIFICA ASSET (JS/CSS): Solo ricompilazione Esbuild
+							log.Printf("Asset change detected in: %s. Recompiling JS/CSS...", event.Name)
+
+							compileJs := exec.Command("make", "es")
+							compileJs.Stdout = os.Stdout
+							compileJs.Stderr = os.Stderr
+
+							if err := compileJs.Run(); err != nil {
+								log.Println("ERROR executing make es:", err)
+							} else {
+								log.Println("JS/CSS Recompiled! Browser reload required.")
+							}
+
+						} else if strings.HasSuffix(event.Name, ".go") || strings.HasSuffix(event.Name, ".templ") {
+							compileTempl := exec.Command("make", "templ")
+							compileTempl.Stdout = os.Stdout
+							compileTempl.Stderr = os.Stderr
+
+							if err := compileTempl.Run(); err != nil {
+								log.Println("WATCHER ERROR executing make templ:", err)
+								continue
+							}
+							log.Println("WATCHER Templ Recompiled!")
+
+							close(done)
+							return
+						}
+					}
+				case err, ok := <-watcher.Errors:
+					if !ok {
+						return
+					}
+					log.Println("Error:", err)
 				}
-			case err, ok := <-watcher.Errors:
-				if !ok {
-					return
-				}
-				log.Println("Error:", err)
+			}
+		}()
+
+		directoryToWatch := []string{
+			".",
+			"server",
+			"src",
+			"templates",
+		}
+
+		for _, dir := range directoryToWatch {
+			// Check is dir extists
+			_, err := os.Stat(dir)
+			if err != nil {
+				log.Printf("WATCHER %s is not a valid dir and will be not watched", dir)
+				continue
+			}
+			if err = watcher.Add(dir); err != nil {
+				log.Fatal(err)
 			}
 		}
-	}()
 
-	// Aggiungi la directory e blocca
-	if err = watcher.Add("."); err != nil {
-		log.Fatal(err)
+		<-done
+		stopServer(serverProcess)
 	}
-	// Blocca finché la goroutine non chiude 'done' (solo in caso di riavvio)
-	<-done
-	// Quando 'done' è chiuso, l'esecuzione esce da Watch() e main() termina.
 }

@@ -1,24 +1,18 @@
 .PHONY: all clean run run-watch run-server server
 
-all: templ es server
+build: templ es server
 
-run-server:
-	./bin/server
-
-run:
-	go run main.go
-
-run-watch:
-	go run watch.go
+server:
+	go build -o webserver server/server.go
 
 templ:
 	templ generate -path "templates/"
 
 es:
-	./node_modules/.bin/esbuild src/index.js --bundle --outfile=./static/index.js
+	./node_modules/.bin/esbuild src/index.js --bundle --outfile=./static/bundle.js
 
-server:
-	go build -o bin/server server/server.go
+run:
+	go run .
 
 clean:
 	rm -f templates/*_templ.go

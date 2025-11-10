@@ -1,4 +1,4 @@
-module github.com/davide-ferrara/animAI
+module animai
 
 go 1.25.3
 
@@ -8,5 +8,3 @@ require (
 )
 
 require golang.org/x/sys v0.34.0 // indirect
-
-replace github.com/davide-ferrara/animAI => ./
