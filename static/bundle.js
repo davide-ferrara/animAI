@@ -83,8 +83,101 @@
   function euclideanModulo(n, m) {
     return (n % m + m) % m;
   }
+  function mapLinear(x, a1, a2, b1, b2) {
+    return b1 + (x - a1) * (b2 - b1) / (a2 - a1);
+  }
+  function inverseLerp(x, y, value) {
+    if (x !== y) {
+      return (value - x) / (y - x);
+    } else {
+      return 0;
+    }
+  }
   function lerp(x, y, t) {
     return (1 - t) * x + t * y;
+  }
+  function damp(x, y, lambda, dt) {
+    return lerp(x, y, 1 - Math.exp(-lambda * dt));
+  }
+  function pingpong(x, length = 1) {
+    return length - Math.abs(euclideanModulo(x, length * 2) - length);
+  }
+  function smoothstep(x, min, max) {
+    if (x <= min) return 0;
+    if (x >= max) return 1;
+    x = (x - min) / (max - min);
+    return x * x * (3 - 2 * x);
+  }
+  function smootherstep(x, min, max) {
+    if (x <= min) return 0;
+    if (x >= max) return 1;
+    x = (x - min) / (max - min);
+    return x * x * x * (x * (x * 6 - 15) + 10);
+  }
+  function randInt(low, high) {
+    return low + Math.floor(Math.random() * (high - low + 1));
+  }
+  function randFloat(low, high) {
+    return low + Math.random() * (high - low);
+  }
+  function randFloatSpread(range) {
+    return range * (0.5 - Math.random());
+  }
+  function seededRandom(s) {
+    if (s !== void 0) _seed = s;
+    let t = _seed += 1831565813;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  }
+  function degToRad(degrees) {
+    return degrees * DEG2RAD;
+  }
+  function radToDeg(radians) {
+    return radians * RAD2DEG;
+  }
+  function isPowerOfTwo(value) {
+    return (value & value - 1) === 0 && value !== 0;
+  }
+  function ceilPowerOfTwo(value) {
+    return Math.pow(2, Math.ceil(Math.log(value) / Math.LN2));
+  }
+  function floorPowerOfTwo(value) {
+    return Math.pow(2, Math.floor(Math.log(value) / Math.LN2));
+  }
+  function setQuaternionFromProperEuler(q, a, b, c, order) {
+    const cos = Math.cos;
+    const sin = Math.sin;
+    const c2 = cos(b / 2);
+    const s2 = sin(b / 2);
+    const c13 = cos((a + c) / 2);
+    const s13 = sin((a + c) / 2);
+    const c1_3 = cos((a - c) / 2);
+    const s1_3 = sin((a - c) / 2);
+    const c3_1 = cos((c - a) / 2);
+    const s3_1 = sin((c - a) / 2);
+    switch (order) {
+      case "XYX":
+        q.set(c2 * s13, s2 * c1_3, s2 * s1_3, c2 * c13);
+        break;
+      case "YZY":
+        q.set(s2 * s1_3, c2 * s13, s2 * c1_3, c2 * c13);
+        break;
+      case "ZXZ":
+        q.set(s2 * c1_3, s2 * s1_3, c2 * s13, c2 * c13);
+        break;
+      case "XZX":
+        q.set(c2 * s13, s2 * s3_1, s2 * c3_1, c2 * c13);
+        break;
+      case "YXY":
+        q.set(s2 * c3_1, c2 * s13, s2 * s3_1, c2 * c13);
+        break;
+      case "ZYZ":
+        q.set(s2 * s3_1, s2 * c3_1, c2 * s13, c2 * c13);
+        break;
+      default:
+        warn("MathUtils: .setQuaternionFromProperEuler() encountered an unknown order: " + order);
+    }
   }
   function denormalize(value, array) {
     switch (array.constructor) {
@@ -381,6 +474,27 @@
     }
     return ColorManagement.workingColorSpace;
   }
+  function checkIntersection(object, raycaster, ray, thresholdSq, a, b, i) {
+    const positionAttribute = object.geometry.attributes.position;
+    _vStart.fromBufferAttribute(positionAttribute, a);
+    _vEnd.fromBufferAttribute(positionAttribute, b);
+    const distSq = ray.distanceSqToSegment(_vStart, _vEnd, _intersectPointOnRay, _intersectPointOnSegment);
+    if (distSq > thresholdSq) return;
+    _intersectPointOnRay.applyMatrix4(object.matrixWorld);
+    const distance = raycaster.ray.origin.distanceTo(_intersectPointOnRay);
+    if (distance < raycaster.near || distance > raycaster.far) return;
+    return {
+      distance,
+      // What do we want? intersection point on the ray or on the segment??
+      // point: raycaster.ray.at( distance ),
+      point: _intersectPointOnSegment.clone().applyMatrix4(object.matrixWorld),
+      index: i,
+      face: null,
+      faceIndex: null,
+      barycoord: null,
+      object
+    };
+  }
   function convertArray(array, type) {
     if (!array || array.constructor === type) return array;
     if (typeof type.BYTES_PER_ELEMENT === "number") {
@@ -499,10 +613,12 @@
     }
     throw new Error(`Unknown texture type ${type}.`);
   }
-  var REVISION, CullFaceNone, CullFaceBack, CullFaceFront, PCFShadowMap, PCFSoftShadowMap, VSMShadowMap, FrontSide, BackSide, DoubleSide, NoBlending, NormalBlending, AdditiveBlending, SubtractiveBlending, MultiplyBlending, CustomBlending, AddEquation, SubtractEquation, ReverseSubtractEquation, MinEquation, MaxEquation, ZeroFactor, OneFactor, SrcColorFactor, OneMinusSrcColorFactor, SrcAlphaFactor, OneMinusSrcAlphaFactor, DstAlphaFactor, OneMinusDstAlphaFactor, DstColorFactor, OneMinusDstColorFactor, SrcAlphaSaturateFactor, ConstantColorFactor, OneMinusConstantColorFactor, ConstantAlphaFactor, OneMinusConstantAlphaFactor, NeverDepth, AlwaysDepth, LessDepth, LessEqualDepth, EqualDepth, GreaterEqualDepth, GreaterDepth, NotEqualDepth, MultiplyOperation, MixOperation, AddOperation, NoToneMapping, LinearToneMapping, ReinhardToneMapping, CineonToneMapping, ACESFilmicToneMapping, CustomToneMapping, AgXToneMapping, NeutralToneMapping, UVMapping, CubeReflectionMapping, CubeRefractionMapping, EquirectangularReflectionMapping, EquirectangularRefractionMapping, CubeUVReflectionMapping, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, NearestMipmapNearestFilter, NearestMipmapLinearFilter, LinearFilter, LinearMipmapNearestFilter, LinearMipmapLinearFilter, UnsignedByteType, ByteType, ShortType, UnsignedShortType, IntType, UnsignedIntType, FloatType, HalfFloatType, UnsignedShort4444Type, UnsignedShort5551Type, UnsignedInt248Type, UnsignedInt5999Type, UnsignedInt101111Type, AlphaFormat, RGBFormat, RGBAFormat, DepthFormat, DepthStencilFormat, RedFormat, RedIntegerFormat, RGFormat, RGIntegerFormat, RGBAIntegerFormat, RGB_S3TC_DXT1_Format, RGBA_S3TC_DXT1_Format, RGBA_S3TC_DXT3_Format, RGBA_S3TC_DXT5_Format, RGB_PVRTC_4BPPV1_Format, RGB_PVRTC_2BPPV1_Format, RGBA_PVRTC_4BPPV1_Format, RGBA_PVRTC_2BPPV1_Format, RGB_ETC1_Format, RGB_ETC2_Format, RGBA_ETC2_EAC_Format, RGBA_ASTC_4x4_Format, RGBA_ASTC_5x4_Format, RGBA_ASTC_5x5_Format, RGBA_ASTC_6x5_Format, RGBA_ASTC_6x6_Format, RGBA_ASTC_8x5_Format, RGBA_ASTC_8x6_Format, RGBA_ASTC_8x8_Format, RGBA_ASTC_10x5_Format, RGBA_ASTC_10x6_Format, RGBA_ASTC_10x8_Format, RGBA_ASTC_10x10_Format, RGBA_ASTC_12x10_Format, RGBA_ASTC_12x12_Format, RGBA_BPTC_Format, RGB_BPTC_SIGNED_Format, RGB_BPTC_UNSIGNED_Format, RED_RGTC1_Format, SIGNED_RED_RGTC1_Format, RED_GREEN_RGTC2_Format, SIGNED_RED_GREEN_RGTC2_Format, InterpolateDiscrete, InterpolateLinear, InterpolateSmooth, ZeroCurvatureEnding, ZeroSlopeEnding, WrapAroundEnding, BasicDepthPacking, RGBADepthPacking, TangentSpaceNormalMap, ObjectSpaceNormalMap, NoColorSpace, SRGBColorSpace, LinearSRGBColorSpace, LinearTransfer, SRGBTransfer, KeepStencilOp, AlwaysStencilFunc, NeverCompare, LessCompare, EqualCompare, LessEqualCompare, GreaterCompare, NotEqualCompare, GreaterEqualCompare, AlwaysCompare, StaticDrawUsage, GLSL3, WebGLCoordinateSystem, WebGPUCoordinateSystem, _cache, _setConsoleFunction, EventDispatcher, _lut, DEG2RAD, RAD2DEG, Vector2, Quaternion, Vector3, _vector$c, _quaternion$4, Matrix3, _m3, LINEAR_REC709_TO_XYZ, XYZ_TO_LINEAR_REC709, ColorManagement, _canvas, ImageUtils, _sourceId, Source, _textureId, _tempVec3, Texture, Vector4, RenderTarget, WebGLRenderTarget, DataArrayTexture, Data3DTexture, Box3, _points, _vector$b, _box$4, _v0$2, _v1$7, _v2$4, _f0, _f1, _f2, _center, _extents, _triangleNormal, _testAxis, _box$3, _v1$6, _v2$3, Sphere, _vector$a, _segCenter, _segDir, _diff, _edge1, _edge2, _normal$1, Ray, Matrix4, _v1$5, _m1$2, _zero, _one, _x, _y, _z, _matrix$2, _quaternion$3, Euler, Layers, _object3DId, _v1$4, _q1, _m1$1, _target, _position$3, _scale$2, _quaternion$2, _xAxis, _yAxis, _zAxis, _addedEvent, _removedEvent, _childaddedEvent, _childremovedEvent, Object3D, _v0$1, _v1$3, _v2$2, _v3$2, _vab, _vac, _vbc, _vap, _vbp, _vcp, _v40, _v41, _v42, Triangle, _colorKeywords, _hslA, _hslB, Color, _color, _materialId, Material, MeshBasicMaterial, _vector$9, _vector2$1, _id$2, BufferAttribute, Uint16BufferAttribute, Uint32BufferAttribute, Float32BufferAttribute, _id$1, _m1, _obj, _offset, _box$2, _boxMorphTargets, _vector$8, BufferGeometry, _inverseMatrix$3, _ray$3, _sphere$6, _sphereHitAt, _vA$1, _vB$1, _vC$1, _tempA, _morphA, _intersectionPoint, _intersectionPointWorld, Mesh, BoxGeometry, UniformsUtils, default_vertex, default_fragment, ShaderMaterial, Camera, _v3$1, _minTarget, _maxTarget, PerspectiveCamera, fov, aspect, CubeCamera, CubeTexture, WebGLCubeRenderTarget, Group, _moveEvent, WebXRController, Scene, DataTexture, _vector1, _vector2, _normalMatrix, Plane, _sphere$3, _defaultSpriteCenter, _vector$6, Frustum, DepthTexture, ExternalTexture, PlaneGeometry, MeshDepthMaterial, MeshDistanceMaterial, Interpolant, CubicInterpolant, LinearInterpolant, DiscreteInterpolant, KeyframeTrack, BooleanKeyframeTrack, ColorKeyframeTrack, NumberKeyframeTrack, QuaternionLinearInterpolant, QuaternionKeyframeTrack, StringKeyframeTrack, VectorKeyframeTrack, LoadingManager, DefaultLoadingManager, Loader, OrthographicCamera, ArrayCamera, _RESERVED_CHARS_RE, _reservedRe, _wordChar, _wordCharOrDot, _directoryRe, _nodeRe, _objectRe, _propertyRe, _trackRe, _supportedObjectNames, Composite, PropertyBinding, _controlInterpolantsResultBuffer;
+  var REVISION, MOUSE, TOUCH, CullFaceNone, CullFaceBack, CullFaceFront, PCFShadowMap, PCFSoftShadowMap, VSMShadowMap, FrontSide, BackSide, DoubleSide, NoBlending, NormalBlending, AdditiveBlending, SubtractiveBlending, MultiplyBlending, CustomBlending, AddEquation, SubtractEquation, ReverseSubtractEquation, MinEquation, MaxEquation, ZeroFactor, OneFactor, SrcColorFactor, OneMinusSrcColorFactor, SrcAlphaFactor, OneMinusSrcAlphaFactor, DstAlphaFactor, OneMinusDstAlphaFactor, DstColorFactor, OneMinusDstColorFactor, SrcAlphaSaturateFactor, ConstantColorFactor, OneMinusConstantColorFactor, ConstantAlphaFactor, OneMinusConstantAlphaFactor, NeverDepth, AlwaysDepth, LessDepth, LessEqualDepth, EqualDepth, GreaterEqualDepth, GreaterDepth, NotEqualDepth, MultiplyOperation, MixOperation, AddOperation, NoToneMapping, LinearToneMapping, ReinhardToneMapping, CineonToneMapping, ACESFilmicToneMapping, CustomToneMapping, AgXToneMapping, NeutralToneMapping, UVMapping, CubeReflectionMapping, CubeRefractionMapping, EquirectangularReflectionMapping, EquirectangularRefractionMapping, CubeUVReflectionMapping, RepeatWrapping, ClampToEdgeWrapping, MirroredRepeatWrapping, NearestFilter, NearestMipmapNearestFilter, NearestMipmapLinearFilter, LinearFilter, LinearMipmapNearestFilter, LinearMipmapLinearFilter, UnsignedByteType, ByteType, ShortType, UnsignedShortType, IntType, UnsignedIntType, FloatType, HalfFloatType, UnsignedShort4444Type, UnsignedShort5551Type, UnsignedInt248Type, UnsignedInt5999Type, UnsignedInt101111Type, AlphaFormat, RGBFormat, RGBAFormat, DepthFormat, DepthStencilFormat, RedFormat, RedIntegerFormat, RGFormat, RGIntegerFormat, RGBAIntegerFormat, RGB_S3TC_DXT1_Format, RGBA_S3TC_DXT1_Format, RGBA_S3TC_DXT3_Format, RGBA_S3TC_DXT5_Format, RGB_PVRTC_4BPPV1_Format, RGB_PVRTC_2BPPV1_Format, RGBA_PVRTC_4BPPV1_Format, RGBA_PVRTC_2BPPV1_Format, RGB_ETC1_Format, RGB_ETC2_Format, RGBA_ETC2_EAC_Format, RGBA_ASTC_4x4_Format, RGBA_ASTC_5x4_Format, RGBA_ASTC_5x5_Format, RGBA_ASTC_6x5_Format, RGBA_ASTC_6x6_Format, RGBA_ASTC_8x5_Format, RGBA_ASTC_8x6_Format, RGBA_ASTC_8x8_Format, RGBA_ASTC_10x5_Format, RGBA_ASTC_10x6_Format, RGBA_ASTC_10x8_Format, RGBA_ASTC_10x10_Format, RGBA_ASTC_12x10_Format, RGBA_ASTC_12x12_Format, RGBA_BPTC_Format, RGB_BPTC_SIGNED_Format, RGB_BPTC_UNSIGNED_Format, RED_RGTC1_Format, SIGNED_RED_RGTC1_Format, RED_GREEN_RGTC2_Format, SIGNED_RED_GREEN_RGTC2_Format, InterpolateDiscrete, InterpolateLinear, InterpolateSmooth, ZeroCurvatureEnding, ZeroSlopeEnding, WrapAroundEnding, BasicDepthPacking, RGBADepthPacking, TangentSpaceNormalMap, ObjectSpaceNormalMap, NoColorSpace, SRGBColorSpace, LinearSRGBColorSpace, LinearTransfer, SRGBTransfer, KeepStencilOp, AlwaysStencilFunc, NeverCompare, LessCompare, EqualCompare, LessEqualCompare, GreaterCompare, NotEqualCompare, GreaterEqualCompare, AlwaysCompare, StaticDrawUsage, GLSL3, WebGLCoordinateSystem, WebGPUCoordinateSystem, _cache, _setConsoleFunction, EventDispatcher, _lut, _seed, DEG2RAD, RAD2DEG, MathUtils, Vector2, Quaternion, Vector3, _vector$c, _quaternion$4, Matrix3, _m3, LINEAR_REC709_TO_XYZ, XYZ_TO_LINEAR_REC709, ColorManagement, _canvas, ImageUtils, _sourceId, Source, _textureId, _tempVec3, Texture, Vector4, RenderTarget, WebGLRenderTarget, DataArrayTexture, Data3DTexture, Box3, _points, _vector$b, _box$4, _v0$2, _v1$7, _v2$4, _f0, _f1, _f2, _center, _extents, _triangleNormal, _testAxis, _box$3, _v1$6, _v2$3, Sphere, _vector$a, _segCenter, _segDir, _diff, _edge1, _edge2, _normal$1, Ray, Matrix4, _v1$5, _m1$2, _zero, _one, _x, _y, _z, _matrix$2, _quaternion$3, Euler, Layers, _object3DId, _v1$4, _q1, _m1$1, _target, _position$3, _scale$2, _quaternion$2, _xAxis, _yAxis, _zAxis, _addedEvent, _removedEvent, _childaddedEvent, _childremovedEvent, Object3D, _v0$1, _v1$3, _v2$2, _v3$2, _vab, _vac, _vbc, _vap, _vbp, _vcp, _v40, _v41, _v42, Triangle, _colorKeywords, _hslA, _hslB, Color, _color, _materialId, Material, MeshBasicMaterial, _vector$9, _vector2$1, _id$2, BufferAttribute, Uint16BufferAttribute, Uint32BufferAttribute, Float32BufferAttribute, _id$1, _m1, _obj, _offset, _box$2, _boxMorphTargets, _vector$8, BufferGeometry, _inverseMatrix$3, _ray$3, _sphere$6, _sphereHitAt, _vA$1, _vB$1, _vC$1, _tempA, _morphA, _intersectionPoint, _intersectionPointWorld, Mesh, BoxGeometry, UniformsUtils, default_vertex, default_fragment, ShaderMaterial, Camera, _v3$1, _minTarget, _maxTarget, PerspectiveCamera, fov, aspect, CubeCamera, CubeTexture, WebGLCubeRenderTarget, Group, _moveEvent, WebXRController, Scene, DataTexture, _vector1, _vector2, _normalMatrix, Plane, _sphere$3, _defaultSpriteCenter, _vector$6, Frustum, LineBasicMaterial, _vStart, _vEnd, _inverseMatrix$1, _ray$1, _sphere$1, _intersectPointOnRay, _intersectPointOnSegment, Line, _start, _end, LineSegments, DepthTexture, ExternalTexture, PlaneGeometry, MeshDepthMaterial, MeshDistanceMaterial, Interpolant, CubicInterpolant, LinearInterpolant, DiscreteInterpolant, KeyframeTrack, BooleanKeyframeTrack, ColorKeyframeTrack, NumberKeyframeTrack, QuaternionLinearInterpolant, QuaternionKeyframeTrack, StringKeyframeTrack, VectorKeyframeTrack, LoadingManager, DefaultLoadingManager, Loader, OrthographicCamera, ArrayCamera, _RESERVED_CHARS_RE, _reservedRe, _wordChar, _wordCharOrDot, _directoryRe, _nodeRe, _objectRe, _propertyRe, _trackRe, _supportedObjectNames, Composite, PropertyBinding, _controlInterpolantsResultBuffer, Spherical, GridHelper, Controls;
   var init_three_core = __esm({
     "node_modules/three/build/three.core.js"() {
       REVISION = "181";
+      MOUSE = { LEFT: 0, MIDDLE: 1, RIGHT: 2, ROTATE: 0, DOLLY: 1, PAN: 2 };
+      TOUCH = { ROTATE: 0, PAN: 1, DOLLY_PAN: 2, DOLLY_ROTATE: 3 };
       CullFaceNone = 0;
       CullFaceBack = 1;
       CullFaceFront = 2;
@@ -724,8 +840,253 @@
         }
       };
       _lut = ["00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "0a", "0b", "0c", "0d", "0e", "0f", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "1a", "1b", "1c", "1d", "1e", "1f", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "2a", "2b", "2c", "2d", "2e", "2f", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39", "3a", "3b", "3c", "3d", "3e", "3f", "40", "41", "42", "43", "44", "45", "46", "47", "48", "49", "4a", "4b", "4c", "4d", "4e", "4f", "50", "51", "52", "53", "54", "55", "56", "57", "58", "59", "5a", "5b", "5c", "5d", "5e", "5f", "60", "61", "62", "63", "64", "65", "66", "67", "68", "69", "6a", "6b", "6c", "6d", "6e", "6f", "70", "71", "72", "73", "74", "75", "76", "77", "78", "79", "7a", "7b", "7c", "7d", "7e", "7f", "80", "81", "82", "83", "84", "85", "86", "87", "88", "89", "8a", "8b", "8c", "8d", "8e", "8f", "90", "91", "92", "93", "94", "95", "96", "97", "98", "99", "9a", "9b", "9c", "9d", "9e", "9f", "a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9", "aa", "ab", "ac", "ad", "ae", "af", "b0", "b1", "b2", "b3", "b4", "b5", "b6", "b7", "b8", "b9", "ba", "bb", "bc", "bd", "be", "bf", "c0", "c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9", "ca", "cb", "cc", "cd", "ce", "cf", "d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7", "d8", "d9", "da", "db", "dc", "dd", "de", "df", "e0", "e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9", "ea", "eb", "ec", "ed", "ee", "ef", "f0", "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "fa", "fb", "fc", "fd", "fe", "ff"];
+      _seed = 1234567;
       DEG2RAD = Math.PI / 180;
       RAD2DEG = 180 / Math.PI;
+      MathUtils = {
+        DEG2RAD,
+        RAD2DEG,
+        /**
+         * Generate a [UUID](https://en.wikipedia.org/wiki/Universally_unique_identifier)
+         * (universally unique identifier).
+         *
+         * @static
+         * @method
+         * @return {string} The UUID.
+         */
+        generateUUID,
+        /**
+         * Clamps the given value between min and max.
+         *
+         * @static
+         * @method
+         * @param {number} value - The value to clamp.
+         * @param {number} min - The min value.
+         * @param {number} max - The max value.
+         * @return {number} The clamped value.
+         */
+        clamp,
+        /**
+         * Computes the Euclidean modulo of the given parameters that
+         * is `( ( n % m ) + m ) % m`.
+         *
+         * @static
+         * @method
+         * @param {number} n - The first parameter.
+         * @param {number} m - The second parameter.
+         * @return {number} The Euclidean modulo.
+         */
+        euclideanModulo,
+        /**
+         * Performs a linear mapping from range `<a1, a2>` to range `<b1, b2>`
+         * for the given value.
+         *
+         * @static
+         * @method
+         * @param {number} x - The value to be mapped.
+         * @param {number} a1 - Minimum value for range A.
+         * @param {number} a2 - Maximum value for range A.
+         * @param {number} b1 - Minimum value for range B.
+         * @param {number} b2 - Maximum value for range B.
+         * @return {number} The mapped value.
+         */
+        mapLinear,
+        /**
+         * Returns the percentage in the closed interval `[0, 1]` of the given value
+         * between the start and end point.
+         *
+         * @static
+         * @method
+         * @param {number} x - The start point
+         * @param {number} y - The end point.
+         * @param {number} value - A value between start and end.
+         * @return {number} The interpolation factor.
+         */
+        inverseLerp,
+        /**
+         * Returns a value linearly interpolated from two known points based on the given interval -
+         * `t = 0` will return `x` and `t = 1` will return `y`.
+         *
+         * @static
+         * @method
+         * @param {number} x - The start point
+         * @param {number} y - The end point.
+         * @param {number} t - The interpolation factor in the closed interval `[0, 1]`.
+         * @return {number} The interpolated value.
+         */
+        lerp,
+        /**
+         * Smoothly interpolate a number from `x` to `y` in  a spring-like manner using a delta
+         * time to maintain frame rate independent movement. For details, see
+         * [Frame rate independent damping using lerp](http://www.rorydriscoll.com/2016/03/07/frame-rate-independent-damping-using-lerp/).
+         *
+         * @static
+         * @method
+         * @param {number} x - The current point.
+         * @param {number} y - The target point.
+         * @param {number} lambda - A higher lambda value will make the movement more sudden,
+         * and a lower value will make the movement more gradual.
+         * @param {number} dt - Delta time in seconds.
+         * @return {number} The interpolated value.
+         */
+        damp,
+        /**
+         * Returns a value that alternates between `0` and the given `length` parameter.
+         *
+         * @static
+         * @method
+         * @param {number} x - The value to pingpong.
+         * @param {number} [length=1] - The positive value the function will pingpong to.
+         * @return {number} The alternated value.
+         */
+        pingpong,
+        /**
+         * Returns a value in the range `[0,1]` that represents the percentage that `x` has
+         * moved between `min` and `max`, but smoothed or slowed down the closer `x` is to
+         * the `min` and `max`.
+         *
+         * See [Smoothstep](http://en.wikipedia.org/wiki/Smoothstep) for more details.
+         *
+         * @static
+         * @method
+         * @param {number} x - The value to evaluate based on its position between min and max.
+         * @param {number} min - The min value. Any x value below min will be `0`.
+         * @param {number} max - The max value. Any x value above max will be `1`.
+         * @return {number} The alternated value.
+         */
+        smoothstep,
+        /**
+         * A [variation on smoothstep](https://en.wikipedia.org/wiki/Smoothstep#Variations)
+         * that has zero 1st and 2nd order derivatives at x=0 and x=1.
+         *
+         * @static
+         * @method
+         * @param {number} x - The value to evaluate based on its position between min and max.
+         * @param {number} min - The min value. Any x value below min will be `0`.
+         * @param {number} max - The max value. Any x value above max will be `1`.
+         * @return {number} The alternated value.
+         */
+        smootherstep,
+        /**
+         * Returns a random integer from `<low, high>` interval.
+         *
+         * @static
+         * @method
+         * @param {number} low - The lower value boundary.
+         * @param {number} high - The upper value boundary
+         * @return {number} A random integer.
+         */
+        randInt,
+        /**
+         * Returns a random float from `<low, high>` interval.
+         *
+         * @static
+         * @method
+         * @param {number} low - The lower value boundary.
+         * @param {number} high - The upper value boundary
+         * @return {number} A random float.
+         */
+        randFloat,
+        /**
+         * Returns a random integer from `<-range/2, range/2>` interval.
+         *
+         * @static
+         * @method
+         * @param {number} range - Defines the value range.
+         * @return {number} A random float.
+         */
+        randFloatSpread,
+        /**
+         * Returns a deterministic pseudo-random float in the interval `[0, 1]`.
+         *
+         * @static
+         * @method
+         * @param {number} [s] - The integer seed.
+         * @return {number} A random float.
+         */
+        seededRandom,
+        /**
+         * Converts degrees to radians.
+         *
+         * @static
+         * @method
+         * @param {number} degrees - A value in degrees.
+         * @return {number} The converted value in radians.
+         */
+        degToRad,
+        /**
+         * Converts radians to degrees.
+         *
+         * @static
+         * @method
+         * @param {number} radians - A value in radians.
+         * @return {number} The converted value in degrees.
+         */
+        radToDeg,
+        /**
+         * Returns `true` if the given number is a power of two.
+         *
+         * @static
+         * @method
+         * @param {number} value - The value to check.
+         * @return {boolean} Whether the given number is a power of two or not.
+         */
+        isPowerOfTwo,
+        /**
+         * Returns the smallest power of two that is greater than or equal to the given number.
+         *
+         * @static
+         * @method
+         * @param {number} value - The value to find a POT for.
+         * @return {number} The smallest power of two that is greater than or equal to the given number.
+         */
+        ceilPowerOfTwo,
+        /**
+         * Returns the largest power of two that is less than or equal to the given number.
+         *
+         * @static
+         * @method
+         * @param {number} value - The value to find a POT for.
+         * @return {number} The largest power of two that is less than or equal to the given number.
+         */
+        floorPowerOfTwo,
+        /**
+         * Sets the given quaternion from the [Intrinsic Proper Euler Angles](https://en.wikipedia.org/wiki/Euler_angles)
+         * defined by the given angles and order.
+         *
+         * Rotations are applied to the axes in the order specified by order:
+         * rotation by angle `a` is applied first, then by angle `b`, then by angle `c`.
+         *
+         * @static
+         * @method
+         * @param {Quaternion} q - The quaternion to set.
+         * @param {number} a - The rotation applied to the first axis, in radians.
+         * @param {number} b - The rotation applied to the second axis, in radians.
+         * @param {number} c - The rotation applied to the third axis, in radians.
+         * @param {('XYX'|'XZX'|'YXY'|'YZY'|'ZXZ'|'ZYZ')} order - A string specifying the axes order.
+         */
+        setQuaternionFromProperEuler,
+        /**
+         * Normalizes the given value according to the given typed array.
+         *
+         * @static
+         * @method
+         * @param {number} value - The float value in the range `[0,1]` to normalize.
+         * @param {TypedArray} array - The typed array that defines the data type of the value.
+         * @return {number} The normalize value.
+         */
+        normalize,
+        /**
+         * Denormalizes the given value according to the given typed array.
+         *
+         * @static
+         * @method
+         * @param {number} value - The value to denormalize.
+         * @param {TypedArray} array - The typed array that defines the data type of the value.
+         * @return {number} The denormalize (float) value in the range `[0,1]`.
+         */
+        denormalize
+      };
       Vector2 = class _Vector2 {
         /**
          * Constructs a new 2D vector.
@@ -12928,6 +13289,207 @@
           return new this.constructor().copy(this);
         }
       };
+      LineBasicMaterial = class extends Material {
+        /**
+         * Constructs a new line basic material.
+         *
+         * @param {Object} [parameters] - An object with one or more properties
+         * defining the material's appearance. Any property of the material
+         * (including any property from inherited materials) can be passed
+         * in here. Color values can be passed any type of value accepted
+         * by {@link Color#set}.
+         */
+        constructor(parameters) {
+          super();
+          this.isLineBasicMaterial = true;
+          this.type = "LineBasicMaterial";
+          this.color = new Color(16777215);
+          this.map = null;
+          this.linewidth = 1;
+          this.linecap = "round";
+          this.linejoin = "round";
+          this.fog = true;
+          this.setValues(parameters);
+        }
+        copy(source) {
+          super.copy(source);
+          this.color.copy(source.color);
+          this.map = source.map;
+          this.linewidth = source.linewidth;
+          this.linecap = source.linecap;
+          this.linejoin = source.linejoin;
+          this.fog = source.fog;
+          return this;
+        }
+      };
+      _vStart = /* @__PURE__ */ new Vector3();
+      _vEnd = /* @__PURE__ */ new Vector3();
+      _inverseMatrix$1 = /* @__PURE__ */ new Matrix4();
+      _ray$1 = /* @__PURE__ */ new Ray();
+      _sphere$1 = /* @__PURE__ */ new Sphere();
+      _intersectPointOnRay = /* @__PURE__ */ new Vector3();
+      _intersectPointOnSegment = /* @__PURE__ */ new Vector3();
+      Line = class extends Object3D {
+        /**
+         * Constructs a new line.
+         *
+         * @param {BufferGeometry} [geometry] - The line geometry.
+         * @param {Material|Array<Material>} [material] - The line material.
+         */
+        constructor(geometry = new BufferGeometry(), material = new LineBasicMaterial()) {
+          super();
+          this.isLine = true;
+          this.type = "Line";
+          this.geometry = geometry;
+          this.material = material;
+          this.morphTargetDictionary = void 0;
+          this.morphTargetInfluences = void 0;
+          this.updateMorphTargets();
+        }
+        copy(source, recursive) {
+          super.copy(source, recursive);
+          this.material = Array.isArray(source.material) ? source.material.slice() : source.material;
+          this.geometry = source.geometry;
+          return this;
+        }
+        /**
+         * Computes an array of distance values which are necessary for rendering dashed lines.
+         * For each vertex in the geometry, the method calculates the cumulative length from the
+         * current point to the very beginning of the line.
+         *
+         * @return {Line} A reference to this line.
+         */
+        computeLineDistances() {
+          const geometry = this.geometry;
+          if (geometry.index === null) {
+            const positionAttribute = geometry.attributes.position;
+            const lineDistances = [0];
+            for (let i = 1, l = positionAttribute.count; i < l; i++) {
+              _vStart.fromBufferAttribute(positionAttribute, i - 1);
+              _vEnd.fromBufferAttribute(positionAttribute, i);
+              lineDistances[i] = lineDistances[i - 1];
+              lineDistances[i] += _vStart.distanceTo(_vEnd);
+            }
+            geometry.setAttribute("lineDistance", new Float32BufferAttribute(lineDistances, 1));
+          } else {
+            warn("Line.computeLineDistances(): Computation only possible with non-indexed BufferGeometry.");
+          }
+          return this;
+        }
+        /**
+         * Computes intersection points between a casted ray and this line.
+         *
+         * @param {Raycaster} raycaster - The raycaster.
+         * @param {Array<Object>} intersects - The target array that holds the intersection points.
+         */
+        raycast(raycaster, intersects) {
+          const geometry = this.geometry;
+          const matrixWorld = this.matrixWorld;
+          const threshold = raycaster.params.Line.threshold;
+          const drawRange = geometry.drawRange;
+          if (geometry.boundingSphere === null) geometry.computeBoundingSphere();
+          _sphere$1.copy(geometry.boundingSphere);
+          _sphere$1.applyMatrix4(matrixWorld);
+          _sphere$1.radius += threshold;
+          if (raycaster.ray.intersectsSphere(_sphere$1) === false) return;
+          _inverseMatrix$1.copy(matrixWorld).invert();
+          _ray$1.copy(raycaster.ray).applyMatrix4(_inverseMatrix$1);
+          const localThreshold = threshold / ((this.scale.x + this.scale.y + this.scale.z) / 3);
+          const localThresholdSq = localThreshold * localThreshold;
+          const step = this.isLineSegments ? 2 : 1;
+          const index = geometry.index;
+          const attributes = geometry.attributes;
+          const positionAttribute = attributes.position;
+          if (index !== null) {
+            const start = Math.max(0, drawRange.start);
+            const end = Math.min(index.count, drawRange.start + drawRange.count);
+            for (let i = start, l = end - 1; i < l; i += step) {
+              const a = index.getX(i);
+              const b = index.getX(i + 1);
+              const intersect = checkIntersection(this, raycaster, _ray$1, localThresholdSq, a, b, i);
+              if (intersect) {
+                intersects.push(intersect);
+              }
+            }
+            if (this.isLineLoop) {
+              const a = index.getX(end - 1);
+              const b = index.getX(start);
+              const intersect = checkIntersection(this, raycaster, _ray$1, localThresholdSq, a, b, end - 1);
+              if (intersect) {
+                intersects.push(intersect);
+              }
+            }
+          } else {
+            const start = Math.max(0, drawRange.start);
+            const end = Math.min(positionAttribute.count, drawRange.start + drawRange.count);
+            for (let i = start, l = end - 1; i < l; i += step) {
+              const intersect = checkIntersection(this, raycaster, _ray$1, localThresholdSq, i, i + 1, i);
+              if (intersect) {
+                intersects.push(intersect);
+              }
+            }
+            if (this.isLineLoop) {
+              const intersect = checkIntersection(this, raycaster, _ray$1, localThresholdSq, end - 1, start, end - 1);
+              if (intersect) {
+                intersects.push(intersect);
+              }
+            }
+          }
+        }
+        /**
+         * Sets the values of {@link Line#morphTargetDictionary} and {@link Line#morphTargetInfluences}
+         * to make sure existing morph targets can influence this 3D object.
+         */
+        updateMorphTargets() {
+          const geometry = this.geometry;
+          const morphAttributes = geometry.morphAttributes;
+          const keys = Object.keys(morphAttributes);
+          if (keys.length > 0) {
+            const morphAttribute = morphAttributes[keys[0]];
+            if (morphAttribute !== void 0) {
+              this.morphTargetInfluences = [];
+              this.morphTargetDictionary = {};
+              for (let m = 0, ml = morphAttribute.length; m < ml; m++) {
+                const name = morphAttribute[m].name || String(m);
+                this.morphTargetInfluences.push(0);
+                this.morphTargetDictionary[name] = m;
+              }
+            }
+          }
+        }
+      };
+      _start = /* @__PURE__ */ new Vector3();
+      _end = /* @__PURE__ */ new Vector3();
+      LineSegments = class extends Line {
+        /**
+         * Constructs a new line segments.
+         *
+         * @param {BufferGeometry} [geometry] - The line geometry.
+         * @param {Material|Array<Material>} [material] - The line material.
+         */
+        constructor(geometry, material) {
+          super(geometry, material);
+          this.isLineSegments = true;
+          this.type = "LineSegments";
+        }
+        computeLineDistances() {
+          const geometry = this.geometry;
+          if (geometry.index === null) {
+            const positionAttribute = geometry.attributes.position;
+            const lineDistances = [];
+            for (let i = 0, l = positionAttribute.count; i < l; i += 2) {
+              _start.fromBufferAttribute(positionAttribute, i);
+              _end.fromBufferAttribute(positionAttribute, i + 1);
+              lineDistances[i] = i === 0 ? 0 : lineDistances[i - 1];
+              lineDistances[i + 1] = lineDistances[i] + _start.distanceTo(_end);
+            }
+            geometry.setAttribute("lineDistance", new Float32BufferAttribute(lineDistances, 1));
+          } else {
+            warn("LineSegments.computeLineDistances(): Computation only possible with non-indexed BufferGeometry.");
+          }
+          return this;
+        }
+      };
       DepthTexture = class extends Texture {
         /**
          * Constructs a new depth texture.
@@ -14578,6 +15140,190 @@
         ]
       ];
       _controlInterpolantsResultBuffer = new Float32Array(1);
+      Spherical = class {
+        /**
+         * Constructs a new spherical.
+         *
+         * @param {number} [radius=1] - The radius, or the Euclidean distance (straight-line distance) from the point to the origin.
+         * @param {number} [phi=0] - The polar angle in radians from the y (up) axis.
+         * @param {number} [theta=0] - The equator/azimuthal angle in radians around the y (up) axis.
+         */
+        constructor(radius = 1, phi = 0, theta = 0) {
+          this.radius = radius;
+          this.phi = phi;
+          this.theta = theta;
+        }
+        /**
+         * Sets the spherical components by copying the given values.
+         *
+         * @param {number} radius - The radius.
+         * @param {number} phi - The polar angle.
+         * @param {number} theta - The azimuthal angle.
+         * @return {Spherical} A reference to this spherical.
+         */
+        set(radius, phi, theta) {
+          this.radius = radius;
+          this.phi = phi;
+          this.theta = theta;
+          return this;
+        }
+        /**
+         * Copies the values of the given spherical to this instance.
+         *
+         * @param {Spherical} other - The spherical to copy.
+         * @return {Spherical} A reference to this spherical.
+         */
+        copy(other) {
+          this.radius = other.radius;
+          this.phi = other.phi;
+          this.theta = other.theta;
+          return this;
+        }
+        /**
+         * Restricts the polar angle [page:.phi phi] to be between `0.000001` and pi -
+         * `0.000001`.
+         *
+         * @return {Spherical} A reference to this spherical.
+         */
+        makeSafe() {
+          const EPS = 1e-6;
+          this.phi = clamp(this.phi, EPS, Math.PI - EPS);
+          return this;
+        }
+        /**
+         * Sets the spherical components from the given vector which is assumed to hold
+         * Cartesian coordinates.
+         *
+         * @param {Vector3} v - The vector to set.
+         * @return {Spherical} A reference to this spherical.
+         */
+        setFromVector3(v) {
+          return this.setFromCartesianCoords(v.x, v.y, v.z);
+        }
+        /**
+         * Sets the spherical components from the given Cartesian coordinates.
+         *
+         * @param {number} x - The x value.
+         * @param {number} y - The y value.
+         * @param {number} z - The z value.
+         * @return {Spherical} A reference to this spherical.
+         */
+        setFromCartesianCoords(x, y, z) {
+          this.radius = Math.sqrt(x * x + y * y + z * z);
+          if (this.radius === 0) {
+            this.theta = 0;
+            this.phi = 0;
+          } else {
+            this.theta = Math.atan2(x, z);
+            this.phi = Math.acos(clamp(y / this.radius, -1, 1));
+          }
+          return this;
+        }
+        /**
+         * Returns a new spherical with copied values from this instance.
+         *
+         * @return {Spherical} A clone of this instance.
+         */
+        clone() {
+          return new this.constructor().copy(this);
+        }
+      };
+      GridHelper = class extends LineSegments {
+        /**
+         * Constructs a new grid helper.
+         *
+         * @param {number} [size=10] - The size of the grid.
+         * @param {number} [divisions=10] - The number of divisions across the grid.
+         * @param {number|Color|string} [color1=0x444444] - The color of the center line.
+         * @param {number|Color|string} [color2=0x888888] - The color of the lines of the grid.
+         */
+        constructor(size = 10, divisions = 10, color1 = 4473924, color2 = 8947848) {
+          color1 = new Color(color1);
+          color2 = new Color(color2);
+          const center = divisions / 2;
+          const step = size / divisions;
+          const halfSize = size / 2;
+          const vertices = [], colors = [];
+          for (let i = 0, j = 0, k = -halfSize; i <= divisions; i++, k += step) {
+            vertices.push(-halfSize, 0, k, halfSize, 0, k);
+            vertices.push(k, 0, -halfSize, k, 0, halfSize);
+            const color = i === center ? color1 : color2;
+            color.toArray(colors, j);
+            j += 3;
+            color.toArray(colors, j);
+            j += 3;
+            color.toArray(colors, j);
+            j += 3;
+            color.toArray(colors, j);
+            j += 3;
+          }
+          const geometry = new BufferGeometry();
+          geometry.setAttribute("position", new Float32BufferAttribute(vertices, 3));
+          geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
+          const material = new LineBasicMaterial({ vertexColors: true, toneMapped: false });
+          super(geometry, material);
+          this.type = "GridHelper";
+        }
+        /**
+         * Frees the GPU-related resources allocated by this instance. Call this
+         * method whenever this instance is no longer used in your app.
+         */
+        dispose() {
+          this.geometry.dispose();
+          this.material.dispose();
+        }
+      };
+      Controls = class extends EventDispatcher {
+        /**
+         * Constructs a new controls instance.
+         *
+         * @param {Object3D} object - The object that is managed by the controls.
+         * @param {?HTMLElement} domElement - The HTML element used for event listeners.
+         */
+        constructor(object, domElement = null) {
+          super();
+          this.object = object;
+          this.domElement = domElement;
+          this.enabled = true;
+          this.state = -1;
+          this.keys = {};
+          this.mouseButtons = { LEFT: null, MIDDLE: null, RIGHT: null };
+          this.touches = { ONE: null, TWO: null };
+        }
+        /**
+         * Connects the controls to the DOM. This method has so called "side effects" since
+         * it adds the module's event listeners to the DOM.
+         *
+         * @param {HTMLElement} element - The DOM element to connect to.
+         */
+        connect(element) {
+          if (element === void 0) {
+            warn("Controls: connect() now requires an element.");
+            return;
+          }
+          if (this.domElement !== null) this.disconnect();
+          this.domElement = element;
+        }
+        /**
+         * Disconnects the controls from the DOM.
+         */
+        disconnect() {
+        }
+        /**
+         * Call this method if you no longer want use to the controls. It frees all internal
+         * resources and removes all event listeners.
+         */
+        dispose() {
+        }
+        /**
+         * Controls should implement this method if they have to update their internal state
+         * per simulation step.
+         *
+         * @param {number} [delta] - The time delta in seconds.
+         */
+        update() {
+        }
+      };
       if (typeof __THREE_DEVTOOLS__ !== "undefined") {
         __THREE_DEVTOOLS__.dispatchEvent(new CustomEvent("register", { detail: {
           revision: REVISION
@@ -26943,10 +27689,857 @@ void main() {
     }
   });
 
+  // node_modules/three/examples/jsm/controls/OrbitControls.js
+  function onPointerDown(event) {
+    if (this.enabled === false) return;
+    if (this._pointers.length === 0) {
+      this.domElement.setPointerCapture(event.pointerId);
+      this.domElement.addEventListener("pointermove", this._onPointerMove);
+      this.domElement.addEventListener("pointerup", this._onPointerUp);
+    }
+    if (this._isTrackingPointer(event)) return;
+    this._addPointer(event);
+    if (event.pointerType === "touch") {
+      this._onTouchStart(event);
+    } else {
+      this._onMouseDown(event);
+    }
+  }
+  function onPointerMove(event) {
+    if (this.enabled === false) return;
+    if (event.pointerType === "touch") {
+      this._onTouchMove(event);
+    } else {
+      this._onMouseMove(event);
+    }
+  }
+  function onPointerUp(event) {
+    this._removePointer(event);
+    switch (this._pointers.length) {
+      case 0:
+        this.domElement.releasePointerCapture(event.pointerId);
+        this.domElement.removeEventListener("pointermove", this._onPointerMove);
+        this.domElement.removeEventListener("pointerup", this._onPointerUp);
+        this.dispatchEvent(_endEvent);
+        this.state = _STATE.NONE;
+        break;
+      case 1:
+        const pointerId = this._pointers[0];
+        const position = this._pointerPositions[pointerId];
+        this._onTouchStart({ pointerId, pageX: position.x, pageY: position.y });
+        break;
+    }
+  }
+  function onMouseDown(event) {
+    let mouseAction;
+    switch (event.button) {
+      case 0:
+        mouseAction = this.mouseButtons.LEFT;
+        break;
+      case 1:
+        mouseAction = this.mouseButtons.MIDDLE;
+        break;
+      case 2:
+        mouseAction = this.mouseButtons.RIGHT;
+        break;
+      default:
+        mouseAction = -1;
+    }
+    switch (mouseAction) {
+      case MOUSE.DOLLY:
+        if (this.enableZoom === false) return;
+        this._handleMouseDownDolly(event);
+        this.state = _STATE.DOLLY;
+        break;
+      case MOUSE.ROTATE:
+        if (event.ctrlKey || event.metaKey || event.shiftKey) {
+          if (this.enablePan === false) return;
+          this._handleMouseDownPan(event);
+          this.state = _STATE.PAN;
+        } else {
+          if (this.enableRotate === false) return;
+          this._handleMouseDownRotate(event);
+          this.state = _STATE.ROTATE;
+        }
+        break;
+      case MOUSE.PAN:
+        if (event.ctrlKey || event.metaKey || event.shiftKey) {
+          if (this.enableRotate === false) return;
+          this._handleMouseDownRotate(event);
+          this.state = _STATE.ROTATE;
+        } else {
+          if (this.enablePan === false) return;
+          this._handleMouseDownPan(event);
+          this.state = _STATE.PAN;
+        }
+        break;
+      default:
+        this.state = _STATE.NONE;
+    }
+    if (this.state !== _STATE.NONE) {
+      this.dispatchEvent(_startEvent);
+    }
+  }
+  function onMouseMove(event) {
+    switch (this.state) {
+      case _STATE.ROTATE:
+        if (this.enableRotate === false) return;
+        this._handleMouseMoveRotate(event);
+        break;
+      case _STATE.DOLLY:
+        if (this.enableZoom === false) return;
+        this._handleMouseMoveDolly(event);
+        break;
+      case _STATE.PAN:
+        if (this.enablePan === false) return;
+        this._handleMouseMovePan(event);
+        break;
+    }
+  }
+  function onMouseWheel(event) {
+    if (this.enabled === false || this.enableZoom === false || this.state !== _STATE.NONE) return;
+    event.preventDefault();
+    this.dispatchEvent(_startEvent);
+    this._handleMouseWheel(this._customWheelEvent(event));
+    this.dispatchEvent(_endEvent);
+  }
+  function onKeyDown(event) {
+    if (this.enabled === false) return;
+    this._handleKeyDown(event);
+  }
+  function onTouchStart(event) {
+    this._trackPointer(event);
+    switch (this._pointers.length) {
+      case 1:
+        switch (this.touches.ONE) {
+          case TOUCH.ROTATE:
+            if (this.enableRotate === false) return;
+            this._handleTouchStartRotate(event);
+            this.state = _STATE.TOUCH_ROTATE;
+            break;
+          case TOUCH.PAN:
+            if (this.enablePan === false) return;
+            this._handleTouchStartPan(event);
+            this.state = _STATE.TOUCH_PAN;
+            break;
+          default:
+            this.state = _STATE.NONE;
+        }
+        break;
+      case 2:
+        switch (this.touches.TWO) {
+          case TOUCH.DOLLY_PAN:
+            if (this.enableZoom === false && this.enablePan === false) return;
+            this._handleTouchStartDollyPan(event);
+            this.state = _STATE.TOUCH_DOLLY_PAN;
+            break;
+          case TOUCH.DOLLY_ROTATE:
+            if (this.enableZoom === false && this.enableRotate === false) return;
+            this._handleTouchStartDollyRotate(event);
+            this.state = _STATE.TOUCH_DOLLY_ROTATE;
+            break;
+          default:
+            this.state = _STATE.NONE;
+        }
+        break;
+      default:
+        this.state = _STATE.NONE;
+    }
+    if (this.state !== _STATE.NONE) {
+      this.dispatchEvent(_startEvent);
+    }
+  }
+  function onTouchMove(event) {
+    this._trackPointer(event);
+    switch (this.state) {
+      case _STATE.TOUCH_ROTATE:
+        if (this.enableRotate === false) return;
+        this._handleTouchMoveRotate(event);
+        this.update();
+        break;
+      case _STATE.TOUCH_PAN:
+        if (this.enablePan === false) return;
+        this._handleTouchMovePan(event);
+        this.update();
+        break;
+      case _STATE.TOUCH_DOLLY_PAN:
+        if (this.enableZoom === false && this.enablePan === false) return;
+        this._handleTouchMoveDollyPan(event);
+        this.update();
+        break;
+      case _STATE.TOUCH_DOLLY_ROTATE:
+        if (this.enableZoom === false && this.enableRotate === false) return;
+        this._handleTouchMoveDollyRotate(event);
+        this.update();
+        break;
+      default:
+        this.state = _STATE.NONE;
+    }
+  }
+  function onContextMenu(event) {
+    if (this.enabled === false) return;
+    event.preventDefault();
+  }
+  function interceptControlDown(event) {
+    if (event.key === "Control") {
+      this._controlActive = true;
+      const document2 = this.domElement.getRootNode();
+      document2.addEventListener("keyup", this._interceptControlUp, { passive: true, capture: true });
+    }
+  }
+  function interceptControlUp(event) {
+    if (event.key === "Control") {
+      this._controlActive = false;
+      const document2 = this.domElement.getRootNode();
+      document2.removeEventListener("keyup", this._interceptControlUp, { passive: true, capture: true });
+    }
+  }
+  var _changeEvent, _startEvent, _endEvent, _ray, _plane, _TILT_LIMIT, _v, _twoPI, _STATE, _EPS, OrbitControls;
+  var init_OrbitControls = __esm({
+    "node_modules/three/examples/jsm/controls/OrbitControls.js"() {
+      init_three_module();
+      _changeEvent = { type: "change" };
+      _startEvent = { type: "start" };
+      _endEvent = { type: "end" };
+      _ray = new Ray();
+      _plane = new Plane();
+      _TILT_LIMIT = Math.cos(70 * MathUtils.DEG2RAD);
+      _v = new Vector3();
+      _twoPI = 2 * Math.PI;
+      _STATE = {
+        NONE: -1,
+        ROTATE: 0,
+        DOLLY: 1,
+        PAN: 2,
+        TOUCH_ROTATE: 3,
+        TOUCH_PAN: 4,
+        TOUCH_DOLLY_PAN: 5,
+        TOUCH_DOLLY_ROTATE: 6
+      };
+      _EPS = 1e-6;
+      OrbitControls = class extends Controls {
+        /**
+         * Constructs a new controls instance.
+         *
+         * @param {Object3D} object - The object that is managed by the controls.
+         * @param {?HTMLElement} domElement - The HTML element used for event listeners.
+         */
+        constructor(object, domElement = null) {
+          super(object, domElement);
+          this.state = _STATE.NONE;
+          this.target = new Vector3();
+          this.cursor = new Vector3();
+          this.minDistance = 0;
+          this.maxDistance = Infinity;
+          this.minZoom = 0;
+          this.maxZoom = Infinity;
+          this.minTargetRadius = 0;
+          this.maxTargetRadius = Infinity;
+          this.minPolarAngle = 0;
+          this.maxPolarAngle = Math.PI;
+          this.minAzimuthAngle = -Infinity;
+          this.maxAzimuthAngle = Infinity;
+          this.enableDamping = false;
+          this.dampingFactor = 0.05;
+          this.enableZoom = true;
+          this.zoomSpeed = 1;
+          this.enableRotate = true;
+          this.rotateSpeed = 1;
+          this.keyRotateSpeed = 1;
+          this.enablePan = true;
+          this.panSpeed = 1;
+          this.screenSpacePanning = true;
+          this.keyPanSpeed = 7;
+          this.zoomToCursor = false;
+          this.autoRotate = false;
+          this.autoRotateSpeed = 2;
+          this.keys = { LEFT: "ArrowLeft", UP: "ArrowUp", RIGHT: "ArrowRight", BOTTOM: "ArrowDown" };
+          this.mouseButtons = { LEFT: MOUSE.ROTATE, MIDDLE: MOUSE.DOLLY, RIGHT: MOUSE.PAN };
+          this.touches = { ONE: TOUCH.ROTATE, TWO: TOUCH.DOLLY_PAN };
+          this.target0 = this.target.clone();
+          this.position0 = this.object.position.clone();
+          this.zoom0 = this.object.zoom;
+          this._domElementKeyEvents = null;
+          this._lastPosition = new Vector3();
+          this._lastQuaternion = new Quaternion();
+          this._lastTargetPosition = new Vector3();
+          this._quat = new Quaternion().setFromUnitVectors(object.up, new Vector3(0, 1, 0));
+          this._quatInverse = this._quat.clone().invert();
+          this._spherical = new Spherical();
+          this._sphericalDelta = new Spherical();
+          this._scale = 1;
+          this._panOffset = new Vector3();
+          this._rotateStart = new Vector2();
+          this._rotateEnd = new Vector2();
+          this._rotateDelta = new Vector2();
+          this._panStart = new Vector2();
+          this._panEnd = new Vector2();
+          this._panDelta = new Vector2();
+          this._dollyStart = new Vector2();
+          this._dollyEnd = new Vector2();
+          this._dollyDelta = new Vector2();
+          this._dollyDirection = new Vector3();
+          this._mouse = new Vector2();
+          this._performCursorZoom = false;
+          this._pointers = [];
+          this._pointerPositions = {};
+          this._controlActive = false;
+          this._onPointerMove = onPointerMove.bind(this);
+          this._onPointerDown = onPointerDown.bind(this);
+          this._onPointerUp = onPointerUp.bind(this);
+          this._onContextMenu = onContextMenu.bind(this);
+          this._onMouseWheel = onMouseWheel.bind(this);
+          this._onKeyDown = onKeyDown.bind(this);
+          this._onTouchStart = onTouchStart.bind(this);
+          this._onTouchMove = onTouchMove.bind(this);
+          this._onMouseDown = onMouseDown.bind(this);
+          this._onMouseMove = onMouseMove.bind(this);
+          this._interceptControlDown = interceptControlDown.bind(this);
+          this._interceptControlUp = interceptControlUp.bind(this);
+          if (this.domElement !== null) {
+            this.connect(this.domElement);
+          }
+          this.update();
+        }
+        connect(element) {
+          super.connect(element);
+          this.domElement.addEventListener("pointerdown", this._onPointerDown);
+          this.domElement.addEventListener("pointercancel", this._onPointerUp);
+          this.domElement.addEventListener("contextmenu", this._onContextMenu);
+          this.domElement.addEventListener("wheel", this._onMouseWheel, { passive: false });
+          const document2 = this.domElement.getRootNode();
+          document2.addEventListener("keydown", this._interceptControlDown, { passive: true, capture: true });
+          this.domElement.style.touchAction = "none";
+        }
+        disconnect() {
+          this.domElement.removeEventListener("pointerdown", this._onPointerDown);
+          this.domElement.removeEventListener("pointermove", this._onPointerMove);
+          this.domElement.removeEventListener("pointerup", this._onPointerUp);
+          this.domElement.removeEventListener("pointercancel", this._onPointerUp);
+          this.domElement.removeEventListener("wheel", this._onMouseWheel);
+          this.domElement.removeEventListener("contextmenu", this._onContextMenu);
+          this.stopListenToKeyEvents();
+          const document2 = this.domElement.getRootNode();
+          document2.removeEventListener("keydown", this._interceptControlDown, { capture: true });
+          this.domElement.style.touchAction = "auto";
+        }
+        dispose() {
+          this.disconnect();
+        }
+        /**
+         * Get the current vertical rotation, in radians.
+         *
+         * @return {number} The current vertical rotation, in radians.
+         */
+        getPolarAngle() {
+          return this._spherical.phi;
+        }
+        /**
+         * Get the current horizontal rotation, in radians.
+         *
+         * @return {number} The current horizontal rotation, in radians.
+         */
+        getAzimuthalAngle() {
+          return this._spherical.theta;
+        }
+        /**
+         * Returns the distance from the camera to the target.
+         *
+         * @return {number} The distance from the camera to the target.
+         */
+        getDistance() {
+          return this.object.position.distanceTo(this.target);
+        }
+        /**
+         * Adds key event listeners to the given DOM element.
+         * `window` is a recommended argument for using this method.
+         *
+         * @param {HTMLElement} domElement - The DOM element
+         */
+        listenToKeyEvents(domElement) {
+          domElement.addEventListener("keydown", this._onKeyDown);
+          this._domElementKeyEvents = domElement;
+        }
+        /**
+         * Removes the key event listener previously defined with `listenToKeyEvents()`.
+         */
+        stopListenToKeyEvents() {
+          if (this._domElementKeyEvents !== null) {
+            this._domElementKeyEvents.removeEventListener("keydown", this._onKeyDown);
+            this._domElementKeyEvents = null;
+          }
+        }
+        /**
+         * Save the current state of the controls. This can later be recovered with `reset()`.
+         */
+        saveState() {
+          this.target0.copy(this.target);
+          this.position0.copy(this.object.position);
+          this.zoom0 = this.object.zoom;
+        }
+        /**
+         * Reset the controls to their state from either the last time the `saveState()`
+         * was called, or the initial state.
+         */
+        reset() {
+          this.target.copy(this.target0);
+          this.object.position.copy(this.position0);
+          this.object.zoom = this.zoom0;
+          this.object.updateProjectionMatrix();
+          this.dispatchEvent(_changeEvent);
+          this.update();
+          this.state = _STATE.NONE;
+        }
+        update(deltaTime = null) {
+          const position = this.object.position;
+          _v.copy(position).sub(this.target);
+          _v.applyQuaternion(this._quat);
+          this._spherical.setFromVector3(_v);
+          if (this.autoRotate && this.state === _STATE.NONE) {
+            this._rotateLeft(this._getAutoRotationAngle(deltaTime));
+          }
+          if (this.enableDamping) {
+            this._spherical.theta += this._sphericalDelta.theta * this.dampingFactor;
+            this._spherical.phi += this._sphericalDelta.phi * this.dampingFactor;
+          } else {
+            this._spherical.theta += this._sphericalDelta.theta;
+            this._spherical.phi += this._sphericalDelta.phi;
+          }
+          let min = this.minAzimuthAngle;
+          let max = this.maxAzimuthAngle;
+          if (isFinite(min) && isFinite(max)) {
+            if (min < -Math.PI) min += _twoPI;
+            else if (min > Math.PI) min -= _twoPI;
+            if (max < -Math.PI) max += _twoPI;
+            else if (max > Math.PI) max -= _twoPI;
+            if (min <= max) {
+              this._spherical.theta = Math.max(min, Math.min(max, this._spherical.theta));
+            } else {
+              this._spherical.theta = this._spherical.theta > (min + max) / 2 ? Math.max(min, this._spherical.theta) : Math.min(max, this._spherical.theta);
+            }
+          }
+          this._spherical.phi = Math.max(this.minPolarAngle, Math.min(this.maxPolarAngle, this._spherical.phi));
+          this._spherical.makeSafe();
+          if (this.enableDamping === true) {
+            this.target.addScaledVector(this._panOffset, this.dampingFactor);
+          } else {
+            this.target.add(this._panOffset);
+          }
+          this.target.sub(this.cursor);
+          this.target.clampLength(this.minTargetRadius, this.maxTargetRadius);
+          this.target.add(this.cursor);
+          let zoomChanged = false;
+          if (this.zoomToCursor && this._performCursorZoom || this.object.isOrthographicCamera) {
+            this._spherical.radius = this._clampDistance(this._spherical.radius);
+          } else {
+            const prevRadius = this._spherical.radius;
+            this._spherical.radius = this._clampDistance(this._spherical.radius * this._scale);
+            zoomChanged = prevRadius != this._spherical.radius;
+          }
+          _v.setFromSpherical(this._spherical);
+          _v.applyQuaternion(this._quatInverse);
+          position.copy(this.target).add(_v);
+          this.object.lookAt(this.target);
+          if (this.enableDamping === true) {
+            this._sphericalDelta.theta *= 1 - this.dampingFactor;
+            this._sphericalDelta.phi *= 1 - this.dampingFactor;
+            this._panOffset.multiplyScalar(1 - this.dampingFactor);
+          } else {
+            this._sphericalDelta.set(0, 0, 0);
+            this._panOffset.set(0, 0, 0);
+          }
+          if (this.zoomToCursor && this._performCursorZoom) {
+            let newRadius = null;
+            if (this.object.isPerspectiveCamera) {
+              const prevRadius = _v.length();
+              newRadius = this._clampDistance(prevRadius * this._scale);
+              const radiusDelta = prevRadius - newRadius;
+              this.object.position.addScaledVector(this._dollyDirection, radiusDelta);
+              this.object.updateMatrixWorld();
+              zoomChanged = !!radiusDelta;
+            } else if (this.object.isOrthographicCamera) {
+              const mouseBefore = new Vector3(this._mouse.x, this._mouse.y, 0);
+              mouseBefore.unproject(this.object);
+              const prevZoom = this.object.zoom;
+              this.object.zoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.object.zoom / this._scale));
+              this.object.updateProjectionMatrix();
+              zoomChanged = prevZoom !== this.object.zoom;
+              const mouseAfter = new Vector3(this._mouse.x, this._mouse.y, 0);
+              mouseAfter.unproject(this.object);
+              this.object.position.sub(mouseAfter).add(mouseBefore);
+              this.object.updateMatrixWorld();
+              newRadius = _v.length();
+            } else {
+              console.warn("WARNING: OrbitControls.js encountered an unknown camera type - zoom to cursor disabled.");
+              this.zoomToCursor = false;
+            }
+            if (newRadius !== null) {
+              if (this.screenSpacePanning) {
+                this.target.set(0, 0, -1).transformDirection(this.object.matrix).multiplyScalar(newRadius).add(this.object.position);
+              } else {
+                _ray.origin.copy(this.object.position);
+                _ray.direction.set(0, 0, -1).transformDirection(this.object.matrix);
+                if (Math.abs(this.object.up.dot(_ray.direction)) < _TILT_LIMIT) {
+                  this.object.lookAt(this.target);
+                } else {
+                  _plane.setFromNormalAndCoplanarPoint(this.object.up, this.target);
+                  _ray.intersectPlane(_plane, this.target);
+                }
+              }
+            }
+          } else if (this.object.isOrthographicCamera) {
+            const prevZoom = this.object.zoom;
+            this.object.zoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.object.zoom / this._scale));
+            if (prevZoom !== this.object.zoom) {
+              this.object.updateProjectionMatrix();
+              zoomChanged = true;
+            }
+          }
+          this._scale = 1;
+          this._performCursorZoom = false;
+          if (zoomChanged || this._lastPosition.distanceToSquared(this.object.position) > _EPS || 8 * (1 - this._lastQuaternion.dot(this.object.quaternion)) > _EPS || this._lastTargetPosition.distanceToSquared(this.target) > _EPS) {
+            this.dispatchEvent(_changeEvent);
+            this._lastPosition.copy(this.object.position);
+            this._lastQuaternion.copy(this.object.quaternion);
+            this._lastTargetPosition.copy(this.target);
+            return true;
+          }
+          return false;
+        }
+        _getAutoRotationAngle(deltaTime) {
+          if (deltaTime !== null) {
+            return _twoPI / 60 * this.autoRotateSpeed * deltaTime;
+          } else {
+            return _twoPI / 60 / 60 * this.autoRotateSpeed;
+          }
+        }
+        _getZoomScale(delta) {
+          const normalizedDelta = Math.abs(delta * 0.01);
+          return Math.pow(0.95, this.zoomSpeed * normalizedDelta);
+        }
+        _rotateLeft(angle) {
+          this._sphericalDelta.theta -= angle;
+        }
+        _rotateUp(angle) {
+          this._sphericalDelta.phi -= angle;
+        }
+        _panLeft(distance, objectMatrix) {
+          _v.setFromMatrixColumn(objectMatrix, 0);
+          _v.multiplyScalar(-distance);
+          this._panOffset.add(_v);
+        }
+        _panUp(distance, objectMatrix) {
+          if (this.screenSpacePanning === true) {
+            _v.setFromMatrixColumn(objectMatrix, 1);
+          } else {
+            _v.setFromMatrixColumn(objectMatrix, 0);
+            _v.crossVectors(this.object.up, _v);
+          }
+          _v.multiplyScalar(distance);
+          this._panOffset.add(_v);
+        }
+        // deltaX and deltaY are in pixels; right and down are positive
+        _pan(deltaX, deltaY) {
+          const element = this.domElement;
+          if (this.object.isPerspectiveCamera) {
+            const position = this.object.position;
+            _v.copy(position).sub(this.target);
+            let targetDistance = _v.length();
+            targetDistance *= Math.tan(this.object.fov / 2 * Math.PI / 180);
+            this._panLeft(2 * deltaX * targetDistance / element.clientHeight, this.object.matrix);
+            this._panUp(2 * deltaY * targetDistance / element.clientHeight, this.object.matrix);
+          } else if (this.object.isOrthographicCamera) {
+            this._panLeft(deltaX * (this.object.right - this.object.left) / this.object.zoom / element.clientWidth, this.object.matrix);
+            this._panUp(deltaY * (this.object.top - this.object.bottom) / this.object.zoom / element.clientHeight, this.object.matrix);
+          } else {
+            console.warn("WARNING: OrbitControls.js encountered an unknown camera type - pan disabled.");
+            this.enablePan = false;
+          }
+        }
+        _dollyOut(dollyScale) {
+          if (this.object.isPerspectiveCamera || this.object.isOrthographicCamera) {
+            this._scale /= dollyScale;
+          } else {
+            console.warn("WARNING: OrbitControls.js encountered an unknown camera type - dolly/zoom disabled.");
+            this.enableZoom = false;
+          }
+        }
+        _dollyIn(dollyScale) {
+          if (this.object.isPerspectiveCamera || this.object.isOrthographicCamera) {
+            this._scale *= dollyScale;
+          } else {
+            console.warn("WARNING: OrbitControls.js encountered an unknown camera type - dolly/zoom disabled.");
+            this.enableZoom = false;
+          }
+        }
+        _updateZoomParameters(x, y) {
+          if (!this.zoomToCursor) {
+            return;
+          }
+          this._performCursorZoom = true;
+          const rect = this.domElement.getBoundingClientRect();
+          const dx = x - rect.left;
+          const dy = y - rect.top;
+          const w = rect.width;
+          const h = rect.height;
+          this._mouse.x = dx / w * 2 - 1;
+          this._mouse.y = -(dy / h) * 2 + 1;
+          this._dollyDirection.set(this._mouse.x, this._mouse.y, 1).unproject(this.object).sub(this.object.position).normalize();
+        }
+        _clampDistance(dist) {
+          return Math.max(this.minDistance, Math.min(this.maxDistance, dist));
+        }
+        //
+        // event callbacks - update the object state
+        //
+        _handleMouseDownRotate(event) {
+          this._rotateStart.set(event.clientX, event.clientY);
+        }
+        _handleMouseDownDolly(event) {
+          this._updateZoomParameters(event.clientX, event.clientX);
+          this._dollyStart.set(event.clientX, event.clientY);
+        }
+        _handleMouseDownPan(event) {
+          this._panStart.set(event.clientX, event.clientY);
+        }
+        _handleMouseMoveRotate(event) {
+          this._rotateEnd.set(event.clientX, event.clientY);
+          this._rotateDelta.subVectors(this._rotateEnd, this._rotateStart).multiplyScalar(this.rotateSpeed);
+          const element = this.domElement;
+          this._rotateLeft(_twoPI * this._rotateDelta.x / element.clientHeight);
+          this._rotateUp(_twoPI * this._rotateDelta.y / element.clientHeight);
+          this._rotateStart.copy(this._rotateEnd);
+          this.update();
+        }
+        _handleMouseMoveDolly(event) {
+          this._dollyEnd.set(event.clientX, event.clientY);
+          this._dollyDelta.subVectors(this._dollyEnd, this._dollyStart);
+          if (this._dollyDelta.y > 0) {
+            this._dollyOut(this._getZoomScale(this._dollyDelta.y));
+          } else if (this._dollyDelta.y < 0) {
+            this._dollyIn(this._getZoomScale(this._dollyDelta.y));
+          }
+          this._dollyStart.copy(this._dollyEnd);
+          this.update();
+        }
+        _handleMouseMovePan(event) {
+          this._panEnd.set(event.clientX, event.clientY);
+          this._panDelta.subVectors(this._panEnd, this._panStart).multiplyScalar(this.panSpeed);
+          this._pan(this._panDelta.x, this._panDelta.y);
+          this._panStart.copy(this._panEnd);
+          this.update();
+        }
+        _handleMouseWheel(event) {
+          this._updateZoomParameters(event.clientX, event.clientY);
+          if (event.deltaY < 0) {
+            this._dollyIn(this._getZoomScale(event.deltaY));
+          } else if (event.deltaY > 0) {
+            this._dollyOut(this._getZoomScale(event.deltaY));
+          }
+          this.update();
+        }
+        _handleKeyDown(event) {
+          let needsUpdate = false;
+          switch (event.code) {
+            case this.keys.UP:
+              if (event.ctrlKey || event.metaKey || event.shiftKey) {
+                if (this.enableRotate) {
+                  this._rotateUp(_twoPI * this.keyRotateSpeed / this.domElement.clientHeight);
+                }
+              } else {
+                if (this.enablePan) {
+                  this._pan(0, this.keyPanSpeed);
+                }
+              }
+              needsUpdate = true;
+              break;
+            case this.keys.BOTTOM:
+              if (event.ctrlKey || event.metaKey || event.shiftKey) {
+                if (this.enableRotate) {
+                  this._rotateUp(-_twoPI * this.keyRotateSpeed / this.domElement.clientHeight);
+                }
+              } else {
+                if (this.enablePan) {
+                  this._pan(0, -this.keyPanSpeed);
+                }
+              }
+              needsUpdate = true;
+              break;
+            case this.keys.LEFT:
+              if (event.ctrlKey || event.metaKey || event.shiftKey) {
+                if (this.enableRotate) {
+                  this._rotateLeft(_twoPI * this.keyRotateSpeed / this.domElement.clientHeight);
+                }
+              } else {
+                if (this.enablePan) {
+                  this._pan(this.keyPanSpeed, 0);
+                }
+              }
+              needsUpdate = true;
+              break;
+            case this.keys.RIGHT:
+              if (event.ctrlKey || event.metaKey || event.shiftKey) {
+                if (this.enableRotate) {
+                  this._rotateLeft(-_twoPI * this.keyRotateSpeed / this.domElement.clientHeight);
+                }
+              } else {
+                if (this.enablePan) {
+                  this._pan(-this.keyPanSpeed, 0);
+                }
+              }
+              needsUpdate = true;
+              break;
+          }
+          if (needsUpdate) {
+            event.preventDefault();
+            this.update();
+          }
+        }
+        _handleTouchStartRotate(event) {
+          if (this._pointers.length === 1) {
+            this._rotateStart.set(event.pageX, event.pageY);
+          } else {
+            const position = this._getSecondPointerPosition(event);
+            const x = 0.5 * (event.pageX + position.x);
+            const y = 0.5 * (event.pageY + position.y);
+            this._rotateStart.set(x, y);
+          }
+        }
+        _handleTouchStartPan(event) {
+          if (this._pointers.length === 1) {
+            this._panStart.set(event.pageX, event.pageY);
+          } else {
+            const position = this._getSecondPointerPosition(event);
+            const x = 0.5 * (event.pageX + position.x);
+            const y = 0.5 * (event.pageY + position.y);
+            this._panStart.set(x, y);
+          }
+        }
+        _handleTouchStartDolly(event) {
+          const position = this._getSecondPointerPosition(event);
+          const dx = event.pageX - position.x;
+          const dy = event.pageY - position.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          this._dollyStart.set(0, distance);
+        }
+        _handleTouchStartDollyPan(event) {
+          if (this.enableZoom) this._handleTouchStartDolly(event);
+          if (this.enablePan) this._handleTouchStartPan(event);
+        }
+        _handleTouchStartDollyRotate(event) {
+          if (this.enableZoom) this._handleTouchStartDolly(event);
+          if (this.enableRotate) this._handleTouchStartRotate(event);
+        }
+        _handleTouchMoveRotate(event) {
+          if (this._pointers.length == 1) {
+            this._rotateEnd.set(event.pageX, event.pageY);
+          } else {
+            const position = this._getSecondPointerPosition(event);
+            const x = 0.5 * (event.pageX + position.x);
+            const y = 0.5 * (event.pageY + position.y);
+            this._rotateEnd.set(x, y);
+          }
+          this._rotateDelta.subVectors(this._rotateEnd, this._rotateStart).multiplyScalar(this.rotateSpeed);
+          const element = this.domElement;
+          this._rotateLeft(_twoPI * this._rotateDelta.x / element.clientHeight);
+          this._rotateUp(_twoPI * this._rotateDelta.y / element.clientHeight);
+          this._rotateStart.copy(this._rotateEnd);
+        }
+        _handleTouchMovePan(event) {
+          if (this._pointers.length === 1) {
+            this._panEnd.set(event.pageX, event.pageY);
+          } else {
+            const position = this._getSecondPointerPosition(event);
+            const x = 0.5 * (event.pageX + position.x);
+            const y = 0.5 * (event.pageY + position.y);
+            this._panEnd.set(x, y);
+          }
+          this._panDelta.subVectors(this._panEnd, this._panStart).multiplyScalar(this.panSpeed);
+          this._pan(this._panDelta.x, this._panDelta.y);
+          this._panStart.copy(this._panEnd);
+        }
+        _handleTouchMoveDolly(event) {
+          const position = this._getSecondPointerPosition(event);
+          const dx = event.pageX - position.x;
+          const dy = event.pageY - position.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          this._dollyEnd.set(0, distance);
+          this._dollyDelta.set(0, Math.pow(this._dollyEnd.y / this._dollyStart.y, this.zoomSpeed));
+          this._dollyOut(this._dollyDelta.y);
+          this._dollyStart.copy(this._dollyEnd);
+          const centerX = (event.pageX + position.x) * 0.5;
+          const centerY = (event.pageY + position.y) * 0.5;
+          this._updateZoomParameters(centerX, centerY);
+        }
+        _handleTouchMoveDollyPan(event) {
+          if (this.enableZoom) this._handleTouchMoveDolly(event);
+          if (this.enablePan) this._handleTouchMovePan(event);
+        }
+        _handleTouchMoveDollyRotate(event) {
+          if (this.enableZoom) this._handleTouchMoveDolly(event);
+          if (this.enableRotate) this._handleTouchMoveRotate(event);
+        }
+        // pointers
+        _addPointer(event) {
+          this._pointers.push(event.pointerId);
+        }
+        _removePointer(event) {
+          delete this._pointerPositions[event.pointerId];
+          for (let i = 0; i < this._pointers.length; i++) {
+            if (this._pointers[i] == event.pointerId) {
+              this._pointers.splice(i, 1);
+              return;
+            }
+          }
+        }
+        _isTrackingPointer(event) {
+          for (let i = 0; i < this._pointers.length; i++) {
+            if (this._pointers[i] == event.pointerId) return true;
+          }
+          return false;
+        }
+        _trackPointer(event) {
+          let position = this._pointerPositions[event.pointerId];
+          if (position === void 0) {
+            position = new Vector2();
+            this._pointerPositions[event.pointerId] = position;
+          }
+          position.set(event.pageX, event.pageY);
+        }
+        _getSecondPointerPosition(event) {
+          const pointerId = event.pointerId === this._pointers[0] ? this._pointers[1] : this._pointers[0];
+          return this._pointerPositions[pointerId];
+        }
+        //
+        _customWheelEvent(event) {
+          const mode = event.deltaMode;
+          const newEvent = {
+            clientX: event.clientX,
+            clientY: event.clientY,
+            deltaY: event.deltaY
+          };
+          switch (mode) {
+            case 1:
+              newEvent.deltaY *= 16;
+              break;
+            case 2:
+              newEvent.deltaY *= 100;
+              break;
+          }
+          if (event.ctrlKey && !this._controlActive) {
+            newEvent.deltaY *= 10;
+          }
+          return newEvent;
+        }
+      };
+    }
+  });
+
   // src/index.js
   var require_index = __commonJS({
     "src/index.js"() {
       init_three_module();
+      init_OrbitControls();
       var scene = new Scene();
       var camera = new PerspectiveCamera(
         75,
@@ -26954,15 +28547,25 @@ void main() {
         0.1,
         1e3
       );
-      var renderer = new WebGLRenderer();
+      var renderer = new WebGLRenderer({ antialias: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setClearColor(2039583);
       renderer.setAnimationLoop(animate);
       document.body.appendChild(renderer.domElement);
+      camera.position.set(0, 5, 5);
+      var controls = new OrbitControls(camera, renderer.domElement);
+      controls.target.set(0, 0, 0);
+      controls.enablePan = false;
+      controls.enableZoom = true;
+      controls.update();
+      var size = 50;
+      var divisions = 50;
+      var gridHelper = new GridHelper(size, divisions);
+      scene.add(gridHelper);
       var geometry = new BoxGeometry(1, 1, 1);
-      var material = new MeshBasicMaterial({ color: 255 });
+      var material = new MeshBasicMaterial({ color: 6250335 });
       var cube = new Mesh(geometry, material);
       scene.add(cube);
-      camera.position.z = 5;
       function animate() {
         cube.rotation.x += 0.01;
         cube.rotation.y += 0.01;
