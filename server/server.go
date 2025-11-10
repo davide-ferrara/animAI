@@ -6,12 +6,12 @@ import (
 	"net/http"
 
 	"github.com/a-h/templ"
-	"github.com/davide-ferrara/animAI/templates/compiled"
+	"github.com/davide-ferrara/animAI/templates"
 )
 
 func ServerRun() {
 	static := flag.String("d", "../static", "Static Folder")
-	component := compiled.Hello("Dave")
+	component := templates.Hello("Dave")
 
 	http.Handle("/", templ.Handler(component))
 	http.Handle("/static/", http.StripPrefix("/static", http.FileServer(http.Dir(*static))))

@@ -13,7 +13,7 @@ run-watch:
 
 templ:
 	templ generate -path "templates/"
-	mv templates/*_templ.go templates/compiled
+
 es:
 	./node_modules/.bin/esbuild src/index.js --bundle --outfile=./static/index.js
 
@@ -21,6 +21,6 @@ server:
 	go build -o bin/server server/server.go
 
 clean:
-	rm -f templates/compiled/*_templ.go
+	rm -f templates/*_templ.go
 	rm -f static/index.js
 	rm -f bin/server
