@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"flag"
@@ -6,11 +6,12 @@ import (
 	"net/http"
 
 	"github.com/a-h/templ"
+	"github.com/davide-ferrara/animAI/templates/compiled"
 )
 
 func ServerRun() {
 	static := flag.String("d", "../static", "Static Folder")
-	component := hello("Dave")
+	component := compiled.Hello("Dave")
 
 	http.Handle("/", templ.Handler(component))
 	http.Handle("/static/", http.StripPrefix("/static", http.FileServer(http.Dir(*static))))
