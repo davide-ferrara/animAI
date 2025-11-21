@@ -1,7 +1,7 @@
 ESBUILD := ./node_modules/.bin/esbuild 
 SERVER_BIN := webserver
-JS_BUNDLE := static/bundle.js
-TEMPLATES := templates/
+JS_BUNDLE := ./static/bundle.js
+TEMPLATES := ./templates/
 TEMPLATE_SUFFIX := *_templ.go 
 
 .PHONY: all clean run run-server server

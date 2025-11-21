@@ -1,0 +1,17 @@
+.git
+.gitignore
+Dockerfile
+webserver
+server
+node_modules
+static
+src
+templates
+main.go
+watch.go
+package.json
+package-lock.json
+tailwind.config.js
+Makefile
+go.mod
+go.sum
