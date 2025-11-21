@@ -25,7 +25,7 @@ shortuuid==1.0.13
 spacy==3.8.3
 thinc==8.3.3
 torchmetrics==0.7.0
-torchtext==0.15.0
+torchtext==0.15.1
 tqdm==4.67.1
 transformers==4.47.1
 trimesh==3.9.24

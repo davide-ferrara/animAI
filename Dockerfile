@@ -10,6 +10,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y git && \
 
 # Install dependencies
 RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    wget \
     ffmpeg \
     libgl1-mesa-glx \
     libgl1-mesa-dri \
@@ -20,10 +21,10 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     libxi6 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN wget 
+RUN wget https://github.com/davide-ferrara/animAI/raw/refs/heads/main/gpt3requirements.txt
 
 # Install python dependencies, download models, and clean up
-RUN pip install --no-cache-dir -r requirements.txt &&\
+RUN pip install --no-cache-dir -r gpt3requirements.txt &&\
     ./prepare/download_smpl_model.sh && \
     ./prepare/prepare_gpt2.sh && \
     ./prepare/download_t2m_evaluators.sh && \
